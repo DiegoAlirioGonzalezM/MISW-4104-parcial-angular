@@ -1,0 +1,4 @@
+:host ::ng-deep .p-datatable .p-datatable-thead > tr > th {
+  background-color: #333A40 !important;
+  color: white !important;
+}
