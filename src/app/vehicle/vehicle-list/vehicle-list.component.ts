@@ -10,6 +10,7 @@ import { Vehicle } from '../vehicle';
 })
 export class VehicleListComponent implements OnInit {
   vehicles: Array<Vehicle> = [];
+  brandCounts: { [key: string]: number } = {};
 
   constructor(private vehicleService: VehicleService) {}
 
@@ -20,8 +21,16 @@ export class VehicleListComponent implements OnInit {
   getVehicles(): void {
     this.vehicleService.getVehicles().subscribe(vehicles => {
       this.vehicles = vehicles;
+      this.calculateBrandCounts();
     });
   }
 
- 
+  calculateBrandCounts(): void {
+    this.brandCounts = this.vehicles.reduce((acc, vehicle) => {
+      acc[vehicle.marca] = (acc[vehicle.marca] || 0) + 1;
+      return acc;
+    }, {} as { [key: string]: number });
+
+    console.log('***', this.brandCounts)
+  }
 }

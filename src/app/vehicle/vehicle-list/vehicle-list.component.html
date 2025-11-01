@@ -17,4 +17,6 @@
     </ng-template>
 </p-table>
 
-
+<p *ngFor="let brand of brandCounts | keyvalue">
+    Total {{ brand.key }}: {{ brand.value }}
+</p>
