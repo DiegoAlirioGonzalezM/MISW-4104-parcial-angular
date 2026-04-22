@@ -55,10 +55,16 @@ En esta carpeta ya estan listos estos archivos:
 7. `docker-compose.perf.yml`
 8. `scripts/run_locust_docker.sh`
 9. `scripts/run_jmeter_docker.sh`
+10. `scripts/open_jmeter_gui_docker.sh`
 
 ## 4. Levantar el sistema
 
 Este paso prende la base de datos, Redis, el backend y el proxy web.
+
+Importante:
+
+- las pruebas de carga van a ejecutarse contra el backend `api` directamente;
+- el servicio `frontend` puede seguir levantado, pero no sera el objetivo principal de carga.
 
 Ejecuta:
 
@@ -101,6 +107,19 @@ Si no responde, no sigas todavia. Revisa primero:
 1. que Docker este abierto;
 2. que los contenedores sigan arriba;
 3. que no haya otro programa usando el puerto 80.
+
+## 5.1 Que servicio se prueba realmente
+
+En este proyecto existen dos caminos posibles:
+
+1. `http://localhost` o `frontend`: pasa por Nginx.
+2. `http://api:8080`: pega directo al backend.
+
+Para las pruebas de carga de este paquete se usa el segundo camino:
+
+- `http://api:8080`
+
+Eso permite medir el backend directamente, sin meter el proxy Nginx en la latencia principal.
 
 ## 6. Crear carpeta para guardar resultados
 
@@ -167,7 +186,7 @@ bash scripts/run_locust_docker.sh normal
 
 - ejecuta Locust dentro de Docker;
 - usa `locustfile.py` desde la carpeta del proyecto;
-- apunta al sistema usando el nombre interno `frontend`;
+- apunta al backend usando el nombre interno `api:8080`;
 - simula 20 usuarios;
 - crea un reporte HTML;
 - crea archivos CSV con detalle.
@@ -186,13 +205,13 @@ Al terminar, revisa:
 Tambien puedes abrir Locust en el navegador.
 
 1. Abre `http://localhost:8089`
-2. En `Host` escribe: `http://frontend`
+2. En `Host` escribe: `http://api:8080`
 3. Lanza la prueba desde ahi
 
 Importante:
 
 - la interfaz web corre en tu navegador por el puerto `8089`;
-- pero el trafico desde Locust hacia la aplicacion viaja dentro de Docker usando `http://frontend`.
+- pero el trafico desde Locust hacia la aplicacion viaja dentro de Docker usando `http://api:8080`.
 
 ## 9. Ejecutar todos los escenarios con Locust
 
@@ -250,47 +269,113 @@ El archivo `index.html` es uno de los reportes mas importantes para entregar.
 Si quieres lanzar el comando manualmente, usa este:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.perf.yml run --rm jmeter jmeter -n -t /workspace/test_plan.jmx -l /workspace/reports/jmeter/dashboard-all.jtl -e -o /workspace/reports/jmeter/dashboard-all -JtargetHost=frontend -JtargetPort=80 -JtargetProtocol=http -JadminEmail=admin@uniandes.edu.co -JadminPassword=Admin123*
+docker compose -f docker-compose.yml -f docker-compose.perf.yml run --rm jmeter jmeter -n -t /workspace/test_plan.jmx -l /workspace/reports/jmeter/dashboard-all.jtl -e -o /workspace/reports/jmeter/dashboard-all -JtargetHost=api -JtargetPort=8080 -JtargetProtocol=http -JadminEmail=admin@uniandes.edu.co -JadminPassword=Admin123*
 ```
 
 ## 11. Como generar reportes separados por escenario en JMeter
 
 Esto es recomendable si quieres una entrega mas ordenada.
 
-## 11.1 Abrir JMeter en modo grafico
+## 11.1 Abrir JMeter visualmente dentro de Docker
 
-Como JMeter tambien esta en Docker, la manera mas facil para una persona sin experiencia es esta:
+Ejecuta este comando:
 
-1. haz una copia de `test_plan.jmx`;
-2. deja activo un solo escenario;
-3. guarda el archivo con otro nombre;
-4. ejecuta ese archivo con el script.
+```bash
+bash scripts/open_jmeter_gui_docker.sh
+```
 
-No es obligatorio abrir interfaz grafica para poder entregar resultados.
+Luego abre en tu navegador:
 
-## 11.2 Dejar un solo escenario activo
+```text
+http://localhost:6080/vnc.html
+```
 
-En el archivo `test_plan.jmx` veras varios grupos, por ejemplo:
+### Que vas a ver
 
-1. `01 Carga Normal`
-2. `02 Carga Alta`
-3. `03 Estres`
-4. `04 Spike`
+1. Se abre una pagina de noVNC.
+2. Veras un boton llamado `Connect`.
+3. Haz clic en `Connect`.
+4. Espera unos segundos.
+5. Se abrira el escritorio remoto del contenedor.
+6. Dentro de ese escritorio aparecera JMeter.
 
-Para sacar un reporte limpio por escenario:
+Si la ventana de JMeter no aparece de inmediato, espera un poco mas porque la primera carga puede tardar.
 
-1. deja activo solo uno;
-2. desactiva los otros tres;
-3. guarda una copia con otro nombre.
+## 11.2 Como importar el archivo del plan en JMeter
+
+Una vez veas JMeter en pantalla:
+
+1. en el menu superior haz clic en `File`;
+2. luego haz clic en `Open`;
+3. se abrira un explorador de archivos;
+4. entra a la carpeta `/workspace`;
+5. selecciona el archivo `test_plan.jmx`;
+6. haz clic en `Open`.
+
+Importante:
+
+- el archivo `test_plan.jmx` ya quedo apuntando por defecto al backend `api:8080` para que funcione dentro de Docker;
+- si lo ejecutas desde la GUI de Docker no necesitas cambiar host ni puerto manualmente.
+
+### Resultado esperado
+
+En el panel izquierdo de JMeter deberias ver el arbol del plan, con grupos como:
+
+1. `00 Setup Data`
+2. `01 Carga Normal`
+3. `02 Carga Alta`
+4. `03 Estres`
+5. `04 Spike`
+
+## 11.2.1 Como ejecutar una prueba desde la GUI de JMeter
+
+Si quieres correrla directamente desde la ventana visual de JMeter:
+
+1. abre el plan `test_plan.jmx`;
+2. deja activo solo el escenario que quieras;
+3. en el menu superior haz clic en el boton verde `Start`;
+4. espera a que termine;
+5. si necesitas detenerlo, usa el boton rojo `Stop`.
+
+Recomendacion:
+
+- para entrega formal es mejor seguir usando los scripts `run_jmeter_docker.sh`, porque generan el dashboard HTML automaticamente;
+- usa la GUI sobre todo para abrir, revisar, importar, activar o desactivar grupos y guardar copias.
+
+## 11.3 Como dejar activo un solo escenario
+
+Esto sirve para sacar un dashboard limpio por cada escenario.
+
+### Paso a paso
+
+1. En el panel izquierdo busca `01 Carga Normal`, `02 Carga Alta`, `03 Estres` y `04 Spike`.
+2. Haz clic derecho sobre el grupo que no quieres correr.
+3. Busca la opcion `Disable`.
+4. Repite esto hasta dejar solo un escenario activo.
 
 Ejemplo:
+
+- si quieres el reporte de carga normal, deja activo solo `01 Carga Normal`;
+- desactiva `02 Carga Alta`, `03 Estres` y `04 Spike`.
+
+## 11.4 Como guardar una copia del plan
+
+No modifiques el archivo original si no hace falta.
+
+Haz esto:
+
+1. ve a `File`;
+2. luego `Save Test Plan As...`;
+3. guarda una copia en `/workspace`.
+
+Nombres recomendados:
 
 1. `test_plan_normal.jmx`
 2. `test_plan_alta.jmx`
 3. `test_plan_estres.jmx`
 4. `test_plan_spike.jmx`
 
-## 11.3 Ejecutar cada escenario por separado
+## 11.5 Ejecutar cada escenario por separado
 
 ### Normal
 
@@ -314,6 +399,14 @@ bash scripts/run_jmeter_docker.sh test_plan_estres.jmx estres
 
 ```bash
 bash scripts/run_jmeter_docker.sh test_plan_spike.jmx spike
+```
+
+## 11.6 Como cerrar JMeter GUI cuando termines
+
+Cuando ya no lo necesites, puedes cerrarlo con este comando en otra terminal:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.perf.yml --profile gui stop jmeter-gui
 ```
 
 ### Que debes entregar de JMeter
@@ -372,9 +465,10 @@ Prepara una carpeta final con:
 7. `docker-compose.perf.yml`
 8. `scripts/run_locust_docker.sh`
 9. `scripts/run_jmeter_docker.sh`
-10. `reports/jmeter/` completo
-11. `reports/locust/` completo
-12. algunos PDFs de `data/reportes/`
+10. `scripts/open_jmeter_gui_docker.sh`
+11. `reports/jmeter/` completo
+12. `reports/locust/` completo
+13. algunos PDFs de `data/reportes/`
 
 ## 15. Recomendacion para la entrega final
 
@@ -476,6 +570,20 @@ Prueba este comando para ver el error directo:
 docker compose -f docker-compose.yml -f docker-compose.perf.yml run --rm jmeter jmeter -v
 ```
 
+### Si JMeter GUI no abre en el navegador
+
+Prueba esto:
+
+1. espera 20 a 40 segundos;
+2. vuelve a abrir `http://localhost:6080/vnc.html`;
+3. revisa si el contenedor esta arriba.
+
+Comando:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.perf.yml --profile gui ps
+```
+
 ### Si no descarga las imagenes de Docker
 
 Puede ser un problema de internet o de permisos de Docker Desktop.
@@ -558,6 +666,12 @@ bash scripts/run_locust_docker.sh spike
 
 ```bash
 bash scripts/run_jmeter_docker.sh test_plan.jmx dashboard-all
+```
+
+### Abrir JMeter GUI en Docker
+
+```bash
+bash scripts/open_jmeter_gui_docker.sh
 ```
 
 ### Apagar todo al final
