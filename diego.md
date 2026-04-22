@@ -16,9 +16,10 @@ Antes de empezar, asegurate de tener instalado lo siguiente:
 ### Obligatorio
 
 1. Docker Desktop
-2. Python 3
-3. Java 17 o superior
-4. Apache JMeter 5.6 o superior
+2. Una terminal
+
+No necesitas instalar JMeter ni Locust en tu computador.
+En esta version ambos se ejecutan dentro de contenedores Docker.
 
 ### Opcional pero recomendado
 
@@ -51,6 +52,9 @@ En esta carpeta ya estan listos estos archivos:
 4. `test_plan.jmx`
 5. `locustfile.py`
 6. `guia_ejecucion_pruebas.md`
+7. `docker-compose.perf.yml`
+8. `scripts/run_locust_docker.sh`
+9. `scripts/run_jmeter_docker.sh`
 
 ## 4. Levantar el sistema
 
@@ -108,30 +112,62 @@ mkdir -p reports/jmeter reports/locust
 
 Esto crea carpetas donde quedaran los reportes.
 
-## 7. Ejecutar una prueba sencilla primero con Locust
+## 7. Levantar tambien las herramientas de pruebas en Docker
+
+Este paso prepara los contenedores de Locust y JMeter.
+
+Ejecuta:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.perf.yml up -d
+```
+
+La primera vez puede tardar varios minutos porque Docker necesita descargar imagenes.
+
+### Que hace este comando
+
+- levanta el sistema normal;
+- agrega un contenedor para Locust;
+- deja lista la configuracion de JMeter para ejecutarlo cuando lo necesites;
+- conecta todo a la misma red interna de Docker.
+
+### Como verificar
+
+Ejecuta:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.perf.yml ps
+```
+
+Debes ver al menos estos servicios:
+
+1. `postgres`
+2. `redis`
+3. `api`
+4. `frontend`
+5. `locust`
+
+El contenedor `jmeter` no se levanta en este paso porque se ejecuta solo cuando corras un comando de prueba.
+
+## 8. Ejecutar una prueba sencilla primero con Locust
 
 Este paso sirve como prueba rapida para confirmar que todo esta funcionando.
 
-### 7.1 Instalar Locust
+### 8.1 Ejecutar prueba normal en modo automatico
+
+La forma mas facil es usar el script preparado.
 
 Ejecuta:
 
 ```bash
-python3 -m pip install locust
-```
-
-### 7.2 Ejecutar prueba normal en modo automatico
-
-Ejecuta:
-
-```bash
-locust -f locustfile.py --host http://localhost --headless --users 20 --spawn-rate 0.33 --run-time 15m --html reports/locust/normal.html --csv reports/locust/normal --csv-full-history
+bash scripts/run_locust_docker.sh normal
 ```
 
 ### Que hace este comando
 
-- usa `locustfile.py`;
-- apunta al sistema en `http://localhost`;
+- ejecuta Locust dentro de Docker;
+- usa `locustfile.py` desde la carpeta del proyecto;
+- apunta al sistema usando el nombre interno `frontend`;
 - simula 20 usuarios;
 - crea un reporte HTML;
 - crea archivos CSV con detalle.
@@ -145,86 +181,96 @@ Al terminar, revisa:
 3. `reports/locust/normal_failures.csv`
 4. `reports/locust/normal_stats_history.csv`
 
-## 8. Ejecutar todos los escenarios con Locust
+### 8.2 Si quieres verlo en interfaz web
+
+Tambien puedes abrir Locust en el navegador.
+
+1. Abre `http://localhost:8089`
+2. En `Host` escribe: `http://frontend`
+3. Lanza la prueba desde ahi
+
+Importante:
+
+- la interfaz web corre en tu navegador por el puerto `8089`;
+- pero el trafico desde Locust hacia la aplicacion viaja dentro de Docker usando `http://frontend`.
+
+## 9. Ejecutar todos los escenarios con Locust
 
 Si la prueba anterior sale bien, ejecuta las demas.
 
-### 8.1 Carga normal
+### 9.1 Carga normal
 
 ```bash
-locust -f locustfile.py --host http://localhost --headless --users 20 --spawn-rate 0.33 --run-time 15m --html reports/locust/normal.html --csv reports/locust/normal --csv-full-history
+bash scripts/run_locust_docker.sh normal
 ```
 
-### 8.2 Carga alta
+### 9.2 Carga alta
 
 ```bash
-locust -f locustfile.py --host http://localhost --headless --users 60 --spawn-rate 0.5 --run-time 20m --html reports/locust/alta.html --csv reports/locust/alta --csv-full-history
+bash scripts/run_locust_docker.sh alta
 ```
 
-### 8.3 Estres
+### 9.3 Estres
 
 ```bash
-locust -f locustfile.py --host http://localhost --headless --users 120 --spawn-rate 0.67 --run-time 15m --html reports/locust/estres.html --csv reports/locust/estres --csv-full-history
+bash scripts/run_locust_docker.sh estres
 ```
 
-### 8.4 Spike
+### 9.4 Spike
 
 ```bash
-locust -f locustfile.py --host http://localhost --headless --users 100 --spawn-rate 10 --run-time 10m --html reports/locust/spike.html --csv reports/locust/spike --csv-full-history
+bash scripts/run_locust_docker.sh spike
 ```
 
-## 9. Ejecutar las pruebas con JMeter
+## 10. Ejecutar las pruebas con JMeter dentro de Docker
 
 JMeter genera dashboards HTML muy utiles para la entrega.
 
-## 9.1 Verifica que JMeter funcione
+## 10.1 Ejecutar el plan completo
 
-Prueba:
-
-```bash
-jmeter --version
-```
-
-Si te muestra la version, puedes continuar.
-
-## 9.2 Ejecutar el plan completo
+La forma mas facil es usar el script preparado.
 
 Ejecuta:
 
 ```bash
-jmeter -n -t test_plan.jmx -l reports/jmeter/results-all.jtl -e -o reports/jmeter/dashboard-all -JtargetHost=localhost -JtargetPort=80 -JtargetProtocol=http -JadminEmail=admin@uniandes.edu.co -JadminPassword='Admin123*'
+bash scripts/run_jmeter_docker.sh test_plan.jmx dashboard-all
 ```
+
+Este comando ejecuta JMeter dentro de Docker y genera los reportes en tu carpeta local.
 
 ### Que genera
 
-1. `reports/jmeter/results-all.jtl`
+1. `reports/jmeter/dashboard-all.jtl`
 2. `reports/jmeter/dashboard-all/index.html`
 
 El archivo `index.html` es uno de los reportes mas importantes para entregar.
 
-## 10. Como generar reportes separados por escenario en JMeter
+## 10.2 Ejecutar JMeter sin usar el script
+
+Si quieres lanzar el comando manualmente, usa este:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.perf.yml run --rm jmeter jmeter -n -t /workspace/test_plan.jmx -l /workspace/reports/jmeter/dashboard-all.jtl -e -o /workspace/reports/jmeter/dashboard-all -JtargetHost=frontend -JtargetPort=80 -JtargetProtocol=http -JadminEmail=admin@uniandes.edu.co -JadminPassword=Admin123*
+```
+
+## 11. Como generar reportes separados por escenario en JMeter
 
 Esto es recomendable si quieres una entrega mas ordenada.
 
-## 10.1 Abrir JMeter en modo grafico
+## 11.1 Abrir JMeter en modo grafico
 
-Ejecuta:
+Como JMeter tambien esta en Docker, la manera mas facil para una persona sin experiencia es esta:
 
-```bash
-jmeter
-```
+1. haz una copia de `test_plan.jmx`;
+2. deja activo un solo escenario;
+3. guarda el archivo con otro nombre;
+4. ejecuta ese archivo con el script.
 
-## 10.2 Abrir el archivo del plan
+No es obligatorio abrir interfaz grafica para poder entregar resultados.
 
-Dentro de JMeter:
+## 11.2 Dejar un solo escenario activo
 
-1. ve a `File`;
-2. luego `Open`;
-3. abre `test_plan.jmx`.
-
-## 10.3 Dejar un solo escenario activo
-
-En el panel izquierdo veras varios grupos, por ejemplo:
+En el archivo `test_plan.jmx` veras varios grupos, por ejemplo:
 
 1. `01 Carga Normal`
 2. `02 Carga Alta`
@@ -244,30 +290,30 @@ Ejemplo:
 3. `test_plan_estres.jmx`
 4. `test_plan_spike.jmx`
 
-## 10.4 Ejecutar cada escenario por separado
+## 11.3 Ejecutar cada escenario por separado
 
 ### Normal
 
 ```bash
-jmeter -n -t test_plan_normal.jmx -l reports/jmeter/normal.jtl -e -o reports/jmeter/normal
+bash scripts/run_jmeter_docker.sh test_plan_normal.jmx normal
 ```
 
 ### Alta
 
 ```bash
-jmeter -n -t test_plan_alta.jmx -l reports/jmeter/alta.jtl -e -o reports/jmeter/alta
+bash scripts/run_jmeter_docker.sh test_plan_alta.jmx alta
 ```
 
 ### Estres
 
 ```bash
-jmeter -n -t test_plan_estres.jmx -l reports/jmeter/estres.jtl -e -o reports/jmeter/estres
+bash scripts/run_jmeter_docker.sh test_plan_estres.jmx estres
 ```
 
 ### Spike
 
 ```bash
-jmeter -n -t test_plan_spike.jmx -l reports/jmeter/spike.jtl -e -o reports/jmeter/spike
+bash scripts/run_jmeter_docker.sh test_plan_spike.jmx spike
 ```
 
 ### Que debes entregar de JMeter
@@ -281,7 +327,7 @@ Las carpetas:
 
 Cada una trae un `index.html`.
 
-## 11. Reportes funcionales del propio sistema
+## 12. Reportes funcionales del propio sistema
 
 Durante las pruebas, el sistema genera archivos PDF de reportes.
 
@@ -293,7 +339,7 @@ data/reportes
 
 Estos PDFs sirven como evidencia de que el flujo funcional tambien fue probado.
 
-## 12. Que debes revisar en los reportes
+## 13. Que debes revisar en los reportes
 
 Aunque no sepas mucho de performance, revisa estas 4 cosas:
 
@@ -313,7 +359,7 @@ Esto indica cuantas solicitudes procesa el sistema.
 
 Revisa si al aumentar usuarios el sistema sigue estable o empieza a fallar.
 
-## 13. Que archivos debes entregar
+## 14. Que archivos debes entregar
 
 Prepara una carpeta final con:
 
@@ -323,11 +369,14 @@ Prepara una carpeta final con:
 4. `test_plan.jmx`
 5. `locustfile.py`
 6. `guia_ejecucion_pruebas.md`
-7. `reports/jmeter/` completo
-8. `reports/locust/` completo
-9. algunos PDFs de `data/reportes/`
+7. `docker-compose.perf.yml`
+8. `scripts/run_locust_docker.sh`
+9. `scripts/run_jmeter_docker.sh`
+10. `reports/jmeter/` completo
+11. `reports/locust/` completo
+12. algunos PDFs de `data/reportes/`
 
-## 14. Recomendacion para la entrega final
+## 15. Recomendacion para la entrega final
 
 Ademas de los archivos tecnicos, crea un documento corto en Word o PDF con este formato:
 
@@ -377,12 +426,12 @@ Ejemplo:
 - en estres la latencia sube notablemente;
 - conviene optimizar la generacion de reportes.
 
-## 15. Como comprimir todo para entregar
+## 16. Como comprimir todo para entregar
 
 Desde la raiz del proyecto ejecuta:
 
 ```bash
-zip -r entrega_pruebas.zip analisis_proyecto.md plan_pruebas_carga.md test_data.csv test_plan.jmx locustfile.py guia_ejecucion_pruebas.md reports data/reportes
+zip -r entrega_pruebas.zip analisis_proyecto.md plan_pruebas_carga.md test_data.csv test_plan.jmx locustfile.py guia_ejecucion_pruebas.md docker-compose.perf.yml scripts reports data/reportes
 ```
 
 Eso genera:
@@ -393,7 +442,7 @@ entrega_pruebas.zip
 
 Ese archivo puede servir como paquete final de entrega.
 
-## 16. Si algo falla
+## 17. Si algo falla
 
 ### Si Docker no levanta
 
@@ -411,23 +460,34 @@ Ejecuta:
 docker compose logs api
 ```
 
-### Si JMeter no abre
-
-Revisa que Java este instalado:
-
-```bash
-java -version
-```
-
 ### Si Locust no corre
 
-Reinstala:
+Revisa los logs del contenedor:
 
 ```bash
-python3 -m pip install --upgrade pip locust
+docker compose -f docker-compose.yml -f docker-compose.perf.yml logs locust
 ```
 
-## 17. Orden recomendado para hacerlo sin enredarte
+### Si JMeter falla
+
+Prueba este comando para ver el error directo:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.perf.yml run --rm jmeter jmeter -v
+```
+
+### Si no descarga las imagenes de Docker
+
+Puede ser un problema de internet o de permisos de Docker Desktop.
+
+Prueba primero:
+
+```bash
+docker pull locustio/locust:2.37.10
+docker pull justb4/jmeter:5.6.3
+```
+
+## 18. Orden recomendado para hacerlo sin enredarte
 
 Sigue exactamente este orden:
 
@@ -436,16 +496,17 @@ Sigue exactamente este orden:
 3. levantar Docker;
 4. probar `health`;
 5. crear carpeta `reports`;
-6. correr Locust normal;
-7. correr Locust alta;
-8. correr Locust estres;
-9. correr Locust spike;
-10. correr JMeter;
-11. revisar `reports/jmeter` y `reports/locust`;
-12. sacar algunos PDFs de `data/reportes`;
-13. comprimir todo en `entrega_pruebas.zip`.
+6. levantar tambien `docker-compose.perf.yml`;
+7. correr Locust normal;
+8. correr Locust alta;
+9. correr Locust estres;
+10. correr Locust spike;
+11. correr JMeter;
+12. revisar `reports/jmeter` y `reports/locust`;
+13. sacar algunos PDFs de `data/reportes`;
+14. comprimir todo en `entrega_pruebas.zip`.
 
-## 18. Resultado final esperado
+## 19. Resultado final esperado
 
 Al terminar correctamente, deberias tener:
 
@@ -454,3 +515,53 @@ Al terminar correctamente, deberias tener:
 3. PDFs generados por el sistema;
 4. documentos Markdown del analisis y plan;
 5. un ZIP final listo para entregar.
+
+## 20. Comandos cortos para copiar y pegar
+
+### Levantar todo
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.perf.yml up -d --build
+```
+
+### Probar salud del sistema
+
+```bash
+curl http://localhost/api/v1/health
+```
+
+### Locust normal
+
+```bash
+bash scripts/run_locust_docker.sh normal
+```
+
+### Locust alta
+
+```bash
+bash scripts/run_locust_docker.sh alta
+```
+
+### Locust estres
+
+```bash
+bash scripts/run_locust_docker.sh estres
+```
+
+### Locust spike
+
+```bash
+bash scripts/run_locust_docker.sh spike
+```
+
+### JMeter completo
+
+```bash
+bash scripts/run_jmeter_docker.sh test_plan.jmx dashboard-all
+```
+
+### Apagar todo al final
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.perf.yml down
+```
