@@ -56,6 +56,8 @@ En esta carpeta ya estan listos estos archivos:
 8. `scripts/run_locust_docker.sh`
 9. `scripts/run_jmeter_docker.sh`
 10. `scripts/open_jmeter_gui_docker.sh`
+11. `scripts/build_jmeter_scenario_plan.py`
+12. `guion_explicacion_plan_pruebas.md`
 
 ## 4. Levantar el sistema
 
@@ -188,6 +190,7 @@ bash scripts/run_locust_docker.sh normal
 - usa `locustfile.py` desde la carpeta del proyecto;
 - apunta al backend usando el nombre interno `api:8080`;
 - simula 20 usuarios;
+- ejecuta el escenario normal durante 5 minutos;
 - crea un reporte HTML;
 - crea archivos CSV con detalle.
 
@@ -199,6 +202,7 @@ Al terminar, revisa:
 2. `reports/locust/normal_stats.csv`
 3. `reports/locust/normal_failures.csv`
 4. `reports/locust/normal_stats_history.csv`
+5. `reports/logs/locust_normal_<timestamp>.log`
 
 ### 8.2 Si quieres verlo en interfaz web
 
@@ -216,6 +220,15 @@ Importante:
 ## 9. Ejecutar todos los escenarios con Locust
 
 Si la prueba anterior sale bien, ejecuta las demas.
+
+Cada escenario genera sus archivos con el mismo nombre del escenario.
+
+Ejemplos:
+
+- `normal` genera `reports/locust/normal.html`ac
+- `alta` genera `reports/locust/alta.html`
+- `estres` genera `reports/locust/estres.html`
+- `spike` genera `reports/locust/spike.html`
 
 ### 9.1 Carga normal
 
@@ -245,36 +258,77 @@ bash scripts/run_locust_docker.sh spike
 
 JMeter genera dashboards HTML muy utiles para la entrega.
 
-## 10.1 Ejecutar el plan completo
+## 10.1 Como funciona ahora el script de JMeter
 
-La forma mas facil es usar el script preparado.
+Ahora JMeter funciona por escenario, igual que Locust.
 
-Ejecuta:
+Tu solo indicas el nombre del escenario y el script hace esto automaticamente:
+
+1. toma `test_plan.jmx`;
+2. genera una copia temporal solo para ese escenario;
+3. desactiva los otros grupos de carga;
+4. pone en `0` el retraso inicial del escenario elegido para que no espere los tiempos del plan secuencial original;
+5. ejecuta JMeter en Docker;
+6. guarda el reporte HTML, el `.jtl` y el log con el nombre del escenario.
+
+## 10.2 Ejecutar cada escenario de JMeter
+
+### Normal
 
 ```bash
-bash scripts/run_jmeter_docker.sh test_plan.jmx dashboard-all
+bash scripts/run_jmeter_docker.sh normal
 ```
 
-Este comando ejecuta JMeter dentro de Docker y genera los reportes en tu carpeta local.
-
-### Que genera
-
-1. `reports/jmeter/dashboard-all.jtl`
-2. `reports/jmeter/dashboard-all/index.html`
-
-El archivo `index.html` es uno de los reportes mas importantes para entregar.
-
-## 10.2 Ejecutar JMeter sin usar el script
-
-Si quieres lanzar el comando manualmente, usa este:
+### Alta
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.perf.yml run --rm jmeter jmeter -n -t /workspace/test_plan.jmx -l /workspace/reports/jmeter/dashboard-all.jtl -e -o /workspace/reports/jmeter/dashboard-all -JtargetHost=api -JtargetPort=8080 -JtargetProtocol=http -JadminEmail=admin@uniandes.edu.co -JadminPassword=Admin123*
+bash scripts/run_jmeter_docker.sh alta
+```
+
+### Estres
+
+```bash
+bash scripts/run_jmeter_docker.sh estres
+```
+
+### Spike
+
+```bash
+bash scripts/run_jmeter_docker.sh spike
+```
+
+## 10.3 Que genera JMeter por cada escenario
+
+Ejemplo con `normal`:
+
+1. `reports/jmeter/normal/index.html`
+2. `reports/jmeter/normal.jtl`
+3. `reports/jmeter/plans/test_plan_normal.jmx`
+4. `reports/logs/jmeter_normal_<timestamp>.log`
+
+Ejemplo con `alta`:
+
+1. `reports/jmeter/alta/index.html`
+2. `reports/jmeter/alta.jtl`
+3. `reports/jmeter/plans/test_plan_alta.jmx`
+4. `reports/logs/jmeter_alta_<timestamp>.log`
+
+## 10.4 Ejecutar JMeter sin usar el script
+
+La recomendacion es usar siempre el script.
+
+Si aun asi quieres ejecutarlo manualmente, primero debes generar un plan para el escenario.
+
+Ejemplo para `normal`:
+
+```bash
+python3 scripts/build_jmeter_scenario_plan.py normal test_plan.jmx reports/jmeter/plans/test_plan_normal.jmx
+docker compose -f docker-compose.yml -f docker-compose.perf.yml run --rm jmeter jmeter -n -t /workspace/reports/jmeter/plans/test_plan_normal.jmx -l /workspace/reports/jmeter/normal.jtl -e -o /workspace/reports/jmeter/normal -JtargetHost=api -JtargetPort=8080 -JtargetProtocol=http -JadminEmail=admin@uniandes.edu.co -JadminPassword=Admin123*
 ```
 
 ## 11. Como generar reportes separados por escenario en JMeter
 
-Esto es recomendable si quieres una entrega mas ordenada.
+Esto ya queda automatizado por el script `run_jmeter_docker.sh`.
 
 ## 11.1 Abrir JMeter visualmente dentro de Docker
 
@@ -344,7 +398,12 @@ Recomendacion:
 
 ## 11.3 Como dejar activo un solo escenario
 
-Esto sirve para sacar un dashboard limpio por cada escenario.
+Esto sigue siendo util si quieres inspeccionarlo visualmente en la GUI.
+
+Importante:
+
+- si ejecutas desde la GUI, JMeter respetara los `delay` del plan original;
+- si ejecutas desde `bash scripts/run_jmeter_docker.sh <escenario>`, el script los pone en `0` automaticamente para ese escenario.
 
 ### Paso a paso
 
@@ -361,6 +420,11 @@ Ejemplo:
 ## 11.4 Como guardar una copia del plan
 
 No modifiques el archivo original si no hace falta.
+
+Importante:
+
+- para ejecutar por linea de comandos ya no necesitas crear estas copias manualmente;
+- el script `run_jmeter_docker.sh` las genera solo.
 
 Haz esto:
 
@@ -380,25 +444,25 @@ Nombres recomendados:
 ### Normal
 
 ```bash
-bash scripts/run_jmeter_docker.sh test_plan_normal.jmx normal
+bash scripts/run_jmeter_docker.sh normal
 ```
 
 ### Alta
 
 ```bash
-bash scripts/run_jmeter_docker.sh test_plan_alta.jmx alta
+bash scripts/run_jmeter_docker.sh alta
 ```
 
 ### Estres
 
 ```bash
-bash scripts/run_jmeter_docker.sh test_plan_estres.jmx estres
+bash scripts/run_jmeter_docker.sh estres
 ```
 
 ### Spike
 
 ```bash
-bash scripts/run_jmeter_docker.sh test_plan_spike.jmx spike
+bash scripts/run_jmeter_docker.sh spike
 ```
 
 ## 11.6 Como cerrar JMeter GUI cuando termines
@@ -466,9 +530,12 @@ Prepara una carpeta final con:
 8. `scripts/run_locust_docker.sh`
 9. `scripts/run_jmeter_docker.sh`
 10. `scripts/open_jmeter_gui_docker.sh`
-11. `reports/jmeter/` completo
-12. `reports/locust/` completo
-13. algunos PDFs de `data/reportes/`
+11. `scripts/build_jmeter_scenario_plan.py`
+12. `guion_explicacion_plan_pruebas.md`
+13. `reports/jmeter/` completo
+14. `reports/locust/` completo
+15. `reports/logs/` completo
+16. algunos PDFs de `data/reportes/`
 
 ## 15. Recomendacion para la entrega final
 
@@ -525,7 +592,7 @@ Ejemplo:
 Desde la raiz del proyecto ejecuta:
 
 ```bash
-zip -r entrega_pruebas.zip analisis_proyecto.md plan_pruebas_carga.md test_data.csv test_plan.jmx locustfile.py guia_ejecucion_pruebas.md docker-compose.perf.yml scripts reports data/reportes
+zip -r entrega_pruebas.zip analisis_proyecto.md plan_pruebas_carga.md test_data.csv test_plan.jmx locustfile.py guia_ejecucion_pruebas.md guion_explicacion_plan_pruebas.md docker-compose.perf.yml scripts reports data/reportes
 ```
 
 Eso genera:
@@ -609,10 +676,13 @@ Sigue exactamente este orden:
 8. correr Locust alta;
 9. correr Locust estres;
 10. correr Locust spike;
-11. correr JMeter;
-12. revisar `reports/jmeter` y `reports/locust`;
-13. sacar algunos PDFs de `data/reportes`;
-14. comprimir todo en `entrega_pruebas.zip`.
+11. correr JMeter normal;
+12. correr JMeter alta;
+13. correr JMeter estres;
+14. correr JMeter spike;
+15. revisar `reports/jmeter` y `reports/locust`;
+16. sacar algunos PDFs de `data/reportes`;
+17. comprimir todo en `entrega_pruebas.zip`.
 
 ## 19. Resultado final esperado
 
@@ -662,10 +732,28 @@ bash scripts/run_locust_docker.sh estres
 bash scripts/run_locust_docker.sh spike
 ```
 
-### JMeter completo
+### JMeter normal
 
 ```bash
-bash scripts/run_jmeter_docker.sh test_plan.jmx dashboard-all
+bash scripts/run_jmeter_docker.sh normal
+```
+
+### JMeter alta
+
+```bash
+bash scripts/run_jmeter_docker.sh alta
+```
+
+### JMeter estres
+
+```bash
+bash scripts/run_jmeter_docker.sh estres
+```
+
+### JMeter spike
+
+```bash
+bash scripts/run_jmeter_docker.sh spike
 ```
 
 ### Abrir JMeter GUI en Docker
